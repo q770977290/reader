@@ -4,6 +4,9 @@
   - [免责声明（Disclaimer）](#免责声明disclaimer)
   - [数据存储](#数据存储)
     - [本地书仓](#本地书仓)
+  - [阅读页面地址](#阅读页面地址)
+    - [全功能web端](#全功能web端)
+    - [适配kindle的 `simple-web`](#适配kindle的-simple-web)
   - [自定义阅读主题](#自定义阅读主题)
   - [自定义样式](#自定义样式)
   - [接口服务配置](#接口服务配置)
@@ -15,7 +18,8 @@
     - [服务器版](#服务器版)
     - [Docker版](#docker版)
     - [Docker-Compose版(推荐)](#docker-compose版推荐)
-  - [Nginx反向代理](#nginx反向代理)
+    - [通过脚本一键部署](#通过脚本一键部署)
+  - [Nginx反向代理(如果有域名可以考虑80端口复用)](#nginx反向代理如果有域名可以考虑80端口复用)
   - [开发编译](#开发编译)
     - [编译脚本](#编译脚本)
     - [编译前端](#编译前端)
@@ -45,13 +49,11 @@
 
 数据存储目录结构如下：
 
-> 书籍缓存目录由 `书名` 变为 `书名_作者名`，这个变动需要手动编辑，否则书籍书源列表缓存信息无法使用
-
 ```bash
 storage
 ├── assets                                        # 静态资源
-│   |── covers                                    # 本地 epub 书籍的封面图片目录
 │   ├── hector                                    # 用户 hector 的资源目录
+│   |   |── covers                                # 本地 epub 书籍的封面图片目录
 │   │   ├── background                            # 自定义阅读背景图片保存目录
 │   │   │   └── 6.jpg
 │   └── reader.css                                # 自定义CSS样式文件
@@ -90,6 +92,18 @@ storage
 
 在 `storage/localStore` 中可以集中存放管理本地书籍，开启访问权限的用户可以在 `页面-浏览书仓` 中选择批量导入到自己的书架进行阅读。
 
+## 阅读页面地址
+
+### 全功能web端
+
+`http://ip:端口/`
+
+### 适配kindle的 `simple-web`
+
+`http://ip:端口/simple-web`
+
+> 注意，需要另外购买授权才能使用，加入TG群了解详情
+
 ## 自定义阅读主题
 
 书架页面仅支持白天模式和黑夜模式。
@@ -112,25 +126,31 @@ storage
 ```yml
 reader:
   app:
-    storagePath: storage   # 数据存储目录
-    showUI: false          # 是否显示UI
-    debug: false           # 是否调试模式
-    packaged: false        # 是否打包为客户端
+    workDir: ""            # 工作目录
     secure: false          # 是否需要登录鉴权，开启后将支持多用户模式
     inviteCode: ""         # 注册邀请码，为空时则开放注册，否则注册时需要输入邀请码
     secureKey: ""          # 管理密码，开启鉴权时，前端管理用户空间的管理密码
-    proxy: false           # 是否使用代理
-    proxyType: "HTTP"      # 代理类型
-    proxyHost: ""          # 代理 Host
-    proxyPort: ""          # 代理 port
-    proxyUsername: ""      # 代理鉴权 用户名
-    proxyPassword: ""      # 代理鉴权 密码
     cacheChapterContent: false # 是否缓存章节内容
-    userLimit: 50          # 用户上限，最大 50
-    userBookLimit: 200     # 用户书籍上限，默认最大 200
+    debugLog: false        # 是否打开调试日志
+    autoClearInactiveUser: 0 # 是否自动清理不活跃用户，为0不清理，大于0为清理超过 autoClearInactiveUser 天未登录的用户
+    mongoUri: ""           # mongodb uri 用于备份数据
+    mongoDbName: "reader"  # mongodb 数据库名称
+    shelfUpdateInteval: 10 # 书架自动更新间隔时间，单位分钟，必须是10的倍数
+    userLimit: 15          # 用户上限，最大 15
+    remoteWebviewApi: ""   # remote-webview 地址
+    defaultUserEnableWebdav: true  # 新用户是否默认启用webdav
+    defaultUserEnableLocalStore: true # 新用户是否默认启用localStore
+    defaultUserEnableBookSource: true # 新用户是否默认可编辑书源，如果为false，则只能使用默认书源，不能新增/修改/删除
+    defaultUserEnableRssSource: true # 新用户是否默认可编辑RSS源
+    defaultUserBookSourceLimit: 100  # 新用户默认书源上限
+    defaultUserBookLimit: 200 # 新用户默认书籍上限
+    autoBackupUserData: false # 是否自动备份用户数据
+    minUserPasswordLength: 8  # 用户密码最小长度
+    remoteBookSourceUpdateInterval: 720   # 远程书源定时更新间隔时间，单位分钟，必须是10的倍数
 
   server:
     port: 8080             # 监听端口
+    contextPath: ""        # 二级目录，为空则不使用二级目录
     webUrl: http://localhost:${reader.server.port}    # web链接
 
 ```
@@ -162,7 +182,7 @@ reader:
 
 ### Windows / MacOS / Linux
 
-从 [releases](https://github.com/hectorqin/reader/releases) 下载对应平台安装包安装即可，需要安装java10以上环境
+从 [releases](https://github.com/hectorqin/reader/releases) 下载对应平台安装包安装即可，需要安装java8及以上环境
 
 MacOS 版 `storage` 默认是 `用户目录/.reader/storage`，其它版本 `storage` 默认是 `程序目录/storage`
 
@@ -203,25 +223,27 @@ MacOS 版 `storage` 默认是 `用户目录/.reader/storage`，其它版本 `sto
 
 ### 服务器版
 
-从 [releases](https://github.com/hectorqin/reader/releases) 下载 `reader-$version.jar` 运行即可，需要安装java10以上环境
+从 [releases](https://github.com/hectorqin/reader/releases) 下载 `reader-server-$version.zip` 解压后运行即可，需要安装java8及以上环境
 
 ```bash
-# 创建目录
-mkdir reader3
-cd reader3
-
-# 下载 jar
-wget "xxxx"
-
 # 安装jdk10以上环境...
 
+# 解压文件
+unzip reader-server-$version.zip
+
 # 运行
+cd reader-server-$version
 
-# 自用版
-java -jar reader-$version.jar
+./bin/startup.sh
+# windows 上直接点击 bin/startup.cmd 文件
 
-# 多用户版
-java -jar reader-$version.jar --reader.app.secure=true --reader.app.secureKey=管理密码 --reader.app.inviteCode=注册邀请码
+# startup 脚本支持以下选项，这些选项如果使用命令行参数修改，则会覆盖配置文件的设置
+# -m single|multi 选择单用户/多用户模式，默认 以配置文件 conf/application.properties 为准
+# -s reader-xx 选择 jar 文件名(不含.jar后缀)，默认使用target目录里最新的jar
+# -i inviteCode 设置多用户模式下的邀请码，默认 以配置文件 conf/application.properties 为准
+# -k secureKey 设置多用户模式下的管理密码，默认 以配置文件 conf/application.properties 为准
+
+# 注意！！！startup 脚本在单用户模式下 默认占用 256m 内存，在多用户模式下 默认占用 1g 内存，如果内存不够，请自行修改脚本
 
 # web端 http://localhost:8080/
 # 接口地址 http://localhost:8080/reader3/
@@ -265,37 +287,87 @@ docker run -d --restart=always --name=reader -e "SPRING_PROFILES_ACTIVE=prod" -e
 #:后面的端口修改为映射端口
 # web端 http://localhost:8080/
 # 接口地址 http://localhost:8080/reader3/
+
+# 通过watchtower手动更新
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup --run-once reader
+
+# 使用 remote-webview 功能
+# 1.创建 remote-webview 容器
+docker run -d --network host --restart=always hectorqin/remote-webview
+# 2.重建 reader 容器
+reader使用宿主机网络：--network host
+reader添加环境变量：-e "READER_APP_REMOTEWEBVIEWAPI=http://localhost:8050"
+获取reader添加参数：--reader.app.remoteWebviewApi=http://localhost:8050"
 ```
 
 ### Docker-Compose版(推荐)
 
-```bash
-#安装docker-compose
+```shell
+#腾讯云，阿里云，华为云，甲骨文等服务器提供商需在控制台面板手动关闭防火墙并放行端口
+#安装docker 及 docker-compose
 #Debian/Ubuntu
 apt install docker-compose -y
 #CentOS
-curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-docker-compose --version
+curl -fsSL https://get.docker.com | bash -s docker #国外服务器
+curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun #国内服务器
 
 # 下载项目里的 docker-compose.yaml
-wget https://raw.githubusercontent.com/hectorqin/reader/master/docker-compose.yaml
-# 更具 docker-compose.yaml 里面的注释编辑所需配置
+wget https://mirror.ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/docker-compose.yaml
+# 根据 docker-compose.yaml 里面的注释编辑所需配置
+vim docker-compose.yaml
+# 保存
+esc
+:wq
 # 启动 docker-compose
 docker-compose up -d
 
 # 停止 docker-compose
 docker-compose stop
+
+# 查看实时日志
+docker logs -f reader
+
+# 自行导入远程书源(打开链接后复制网址导入即可)
+https://legado.aoaostar.com/
+
+# 手动更新
+docker-compose pull && docker-compose up -d
 ```
 
-## Nginx反向代理
+### 通过脚本一键部署
+
+```shell
+# 此脚本对甲骨文非Ubuntu系统,CentOS9可能不兼容。建议网上手动搜索
+#curl
+bash <(curl -L -s https://mirror.ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/reader.sh)
+
+#wget
+bash <(wget -qO- --no-check-certificate https://mirror.ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/reader.sh)
+
+```
+
+## Nginx反向代理(如果有域名可以考虑80端口复用)
+
+```shell
+# 宝塔等各种面板不适用下列教程
+# Debian/Ubuntu
+apt install nginx -y
+# CentOS
+yum install nginx -y
+vim /etc/nginx/conf.d/reader.conf
+将下面代码复制进reader.conf后，修改域名输入
+esc
+:wq
+保持即可
+```
 
 ```nginx
 server {
     listen 80;
     server_name 域名;
     #开启ssl解除注释
-    #不使用宝塔获取证书脚本  https://github.com/Misaka-blog/acme-1key
+    # SSL证书获取
+    # https://github.com/acmesh-official/acme.sh/wiki/%E8%AF%B4%E6%98%8E
     #listen 443 ssl;
     #ssl_certificate 证书.cer;
     #ssl_certificate_key 证书.key;
@@ -317,10 +389,12 @@ server {
     gzip_types text/plain text/css text/javascript application/json application/javascript application/x-javascript application/xml; #设置需要压缩的数据格式
     gzip_vary on;
 
+    client_max_body_size   50m; #允许上传50MB文件,上传本地书籍需要修改此项大小.如nginx主配置文件已添加,删除此行并修改主配置即可
+
     location / {
         proxy_pass  http://127.0.0.1:4396; #端口自行修改为映射端口
-        proxy_http_version	1.1;
-        proxy_cache_bypass	$http_upgrade;
+        proxy_http_version 1.1;
+        proxy_cache_bypass $http_upgrade;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        "upgrade";
         proxy_set_header Host              $host;
@@ -370,10 +444,10 @@ yarn sync
 ```bash
 ./gradlew assemble --info
 
-java -jar build/libs/reader-2.0.0.jar
+java -jar build/libs/reader-${version}.jar
 
 # 指定 storage 路径  默认为相对路径 storage
-# java -Dreader.app.storagePath=cacheStorage  -jar build/libs/reader-2.0.0.jar
+# java -Dreader.app.storagePath=cacheStorage  -jar build/libs/reader-${version}.jar
 
 # web端 http://localhost:8080/
 # 接口地址 http://localhost:8080/reader3/
@@ -465,7 +539,7 @@ lastIndex 是上次搜索结果中返回的字段，默认为 0，可以传入 `
 
 #### 书籍换源
 
-- URL `http://localhost:8080/reader3/saveBookSource`
+- URL `http://localhost:8080/reader3/setBookSource`
 - Method `POST`
 - Body `json 格式`
 
